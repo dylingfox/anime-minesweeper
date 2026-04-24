@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>✨ 动漫扫雷 · Anime Minesweeper</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sakura: #FF6B9D;
+    --deep-sakura: #C8386E;
+    --sky: #87CEEB;
+    --night: #0D0D2B;
+    --mid-night: #1A1A4E;
+    --star: #FFD700;
+    --mint: #7FFFD4;
+    --lavender: #B39DDB;
+    --cell-bg: rgba(255,255,255,0.06);
+    --cell-hover: rgba(255,107,157,0.18);
+    --cell-open: rgba(13,13,43,0.7);
+    --border-glow: rgba(255,107,157,0.5);
+    --text-main: #F0E6FF;
+    --text-dim: #9090C0;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--night);
+    color: var(--text-main);
+    font-family: 'Noto Sans SC', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* ── 星空背景 ── */
+  .starfield {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .star {
+    position: absolute;
+    border-radius: 50%;
+    background: white;
+    animation: twinkle var(--d, 3s) ease-in-out infinite alternate;
+  }
+  @keyframes twinkle {
+    from { opacity: 0.1; transform: scale(0.8); }
+    to   { opacity: 1;   transform: scale(1.2); }
+  }
+
+  /* 樱花飘落 */
+  .petal {
+    position: fixed;
+    top: -30px;
+    font-size: 18px;
+    animation: fall linear infinite;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.7;
+  }
+  @keyframes fall {
+    0%   { transform: translateY(-30px) rotate(0deg); opacity: 0.8; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+  }
+
+  /* ── 容器 ── */
+  .container {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 16px 60px;
+    min-height: 100vh;
+  }
+
+  /* ── 标题 ── */
+  .title-wrap {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .title-jp {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(22px, 5vw, 42px);
+    font-weight: 900;
+    letter-spacing: 4px;
+    background: linear-gradient(135deg, var(--sakura), var(--lavender), var(--mint));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 12px rgba(255,107,157,0.6));
+    animation: titlePulse 3s ease-in-out infinite alternate;
+  }
+  @keyframes titlePulse {
+    from { filter: drop-shadow(0 0 8px rgba(255,107,157,0.4)); }
+    to   { filter: drop-shadow(0 0 20px rgba(179,157,219,0.8)); }
+  }
+  .title-cn {
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 8px;
+    margin-top: 4px;
+  }
+
+  /* ── 难度选择 ── */
+  .difficulty-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .diff-btn {
+    padding: 7px 18px;
+    border-radius: 20px;
+    border: 1.5px solid var(--lavender);
+    background: rgba(179,157,219,0.1);
+    color: var(--lavender);
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .25s;
+    letter-spacing: 1px;
+  }
+  .diff-btn:hover,
+  .diff-btn.active {
+    background: var(--lavender);
+    color: var(--night);
+    box-shadow: 0 0 14px rgba(179,157,219,0.6);
+  }
+
+  /* ── 信息面板 ── */
+  .hud {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 20px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .hud-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(179,157,219,0.25);
+    border-radius: 14px;
+    padding: 8px 18px;
+    min-width: 80px;
+  }
+  .hud-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .hud-val {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--sakura);
+    text-shadow: 0 0 10px rgba(255,107,157,0.7);
+  }
+  .hud-val.timer { color: var(--mint); text-shadow: 0 0 10px rgba(127,255,212,0.7); }
+
+  /* ── 重置按钮 ── */
+  .reset-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid var(--sakura);
+    background: rgba(255,107,157,0.1);
+    font-size: 22px;
+    cursor: pointer;
+    transition: all .3s;
+    display: flex; align-items:center; justify-content:center;
+    box-shadow: 0 0 12px rgba(255,107,157,0.3);
+  }
+  .reset-btn:hover {
+    background: var(--sakura);
+    box-shadow: 0 0 24px rgba(255,107,157,0.7);
+    transform: rotate(360deg) scale(1.1);
+  }
+
+  /* ── 棋盘 ── */
+  .board-wrap {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,107,157,0.2);
+    border-radius: 20px;
+    padding: 16px;
+    box-shadow:
+      0 0 40px rgba(255,107,157,0.1),
+      0 0 80px rgba(100,0,80,0.2),
+      inset 0 0 40px rgba(0,0,0,0.3);
+    position: relative;
+    overflow: hidden;
+  }
+  .board-wrap::before {
+    content:'';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 30px,
+      rgba(255,255,255,0.015) 30px, rgba(255,255,255,0.015) 31px
+    ),
+    repeating-linear-gradient(
+      90deg, transparent, transparent 30px,
+      rgba(255,255,255,0.015) 30px, rgba(255,255,255,0.015) 31px
+    );
+    pointer-events: none;
+  }
+  .board {
+    display: grid;
+    gap: 3px;
+    position: relative;
+  }
+
+  /* ── 单元格 ── */
+  .cell {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,107,157,0.15);
+    background: var(--cell-bg);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    font-family: 'Orbitron', sans-serif;
+    transition: all .15s;
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+  }
+  .cell::after {
+    content:'';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 60%);
+    pointer-events: none;
+    border-radius: 6px;
+  }
+  .cell:hover:not(.open):not(.flagged) {
+    background: var(--cell-hover);
+    border-color: var(--sakura);
+    box-shadow: 0 0 10px rgba(255,107,157,0.4);
+    transform: scale(1.06);
+  }
+  .cell.open {
+    background: var(--cell-open);
+    border-color: rgba(255,255,255,0.06);
+    cursor: default;
+    transform: none;
+  }
+  .cell.open::after { opacity:0; }
+
+  .cell.flagged {
+    background: rgba(255,107,157,0.12);
+    border-color: var(--sakura);
+    box-shadow: 0 0 8px rgba(255,107,157,0.3);
+  }
+  .cell.mine-hit {
+    background: rgba(255,50,50,0.4);
+    border-color: #FF3333;
+    box-shadow: 0 0 16px rgba(255,0,0,0.6);
+    animation: mineExplode .4s ease-out;
+  }
+  @keyframes mineExplode {
+    0%  { transform: scale(1.3); }
+    50% { transform: scale(0.9); }
+    100%{ transform: scale(1); }
+  }
+  .cell.mine-reveal {
+    background: rgba(80,0,0,0.5);
+    border-color: rgba(255,50,50,0.4);
+  }
+
+  /* 数字颜色 */
+  .n1 { color: #64B5F6; }
+  .n2 { color: #81C784; }
+  .n3 { color: #E57373; }
+  .n4 { color: #9575CD; }
+  .n5 { color: #FF8A65; }
+  .n6 { color: #4DD0E1; }
+  .n7 { color: #F06292; }
+  .n8 { color: #CFD8DC; }
+
+  /* ── 消息覆盖 ── */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .4s;
+    backdrop-filter: blur(6px);
+  }
+  .overlay.show { opacity:1; pointer-events:all; }
+  .msg-box {
+    background: linear-gradient(135deg, rgba(26,26,78,0.95), rgba(13,13,43,0.98));
+    border: 2px solid var(--sakura);
+    border-radius: 24px;
+    padding: 48px 56px;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(255,107,157,0.4);
+    animation: msgPop .5s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes msgPop {
+    from { transform: scale(0.6) translateY(20px); opacity:0; }
+    to   { transform: scale(1) translateY(0); opacity:1; }
+  }
+  .msg-emoji { font-size: 56px; display:block; margin-bottom: 16px; }
+  .msg-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 26px;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--sakura), var(--lavender));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+  .msg-sub { color: var(--text-dim); font-size: 14px; margin-bottom: 28px; }
+  .msg-btn {
+    padding: 12px 36px;
+    border-radius: 30px;
+    border: none;
+    background: linear-gradient(135deg, var(--sakura), var(--deep-sakura));
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: all .25s;
+    box-shadow: 0 4px 20px rgba(255,107,157,0.5);
+  }
+  .msg-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(255,107,157,0.7);
+  }
+
+  /* ── 提示文字 ── */
+  .hint {
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-align:center;
+  }
+  .hint span { color: var(--sakura); }
+
+  /* 烟花粒子 */
+  .firework {
+    position: fixed;
+    pointer-events: none;
+    z-index: 200;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    animation: fw .8s ease-out forwards;
+  }
+  @keyframes fw {
+    0%   { transform: translate(0,0) scale(1); opacity:1; }
+    100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity:0; }
+  }
+
+  /* 开启动画 */
+  .cell.open-anim {
+    animation: cellOpen .2s ease-out;
+  }
+  @keyframes cellOpen {
+    0%  { transform: scale(1.15); }
+    100%{ transform: scale(1); }
+  }
+</style>
+</head>
+<body>
+
+<div class="starfield" id="starfield"></div>
+
+<div class="container">
+  <div class="title-wrap">
+    <div class="title-jp">✦ ANIME MINESWEEPER ✦</div>
+    <div class="title-cn">动漫扫雷 · 星空版</div>
+  </div>
+
+  <div class="difficulty-bar">
+    <button class="diff-btn active" data-level="easy">🌸 简单 9×9</button>
+    <button class="diff-btn" data-level="medium">⚡ 中等 16×16</button>
+    <button class="diff-btn" data-level="hard">💀 困难 16×30</button>
+  </div>
+
+  <div class="hud">
+    <div class="hud-box">
+      <div class="hud-label">💣 雷数</div>
+      <div class="hud-val" id="mineCount">10</div>
+    </div>
+    <button class="reset-btn" id="resetBtn" title="重新开始">🌸</button>
+    <div class="hud-box">
+      <div class="hud-label">⏱ 时间</div>
+      <div class="hud-val timer" id="timer">000</div>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="hint">
+    <span>左键</span> 揭开 &nbsp;|&nbsp; <span>右键</span> 插旗 / 移旗
+  </div>
+</div>
+
+<!-- 结果覆盖 -->
+<div class="overlay" id="overlay">
+  <div class="msg-box">
+    <span class="msg-emoji" id="msgEmoji">🎉</span>
+    <div class="msg-title" id="msgTitle">胜利！</div>
+    <div class="msg-sub" id="msgSub">你清除了所有地雷！</div>
+    <button class="msg-btn" id="msgBtn">再来一次 ✨</button>
+  </div>
+</div>
+
+<script>
+// ── 星空生成 ──
+const starfield = document.getElementById('starfield');
+for (let i = 0; i < 180; i++) {
+  const s = document.createElement('div');
+  s.className = 'star';
+  const size = Math.random() * 2.5 + 0.5;
+  s.style.cssText = `
+    left:${Math.random()*100}%;
+    top:${Math.random()*100}%;
+    width:${size}px;height:${size}px;
+    --d:${(Math.random()*3+2).toFixed(1)}s;
+    animation-delay:${(Math.random()*4).toFixed(1)}s;
+    opacity:${Math.random()*0.6+0.2};
+  `;
+  starfield.appendChild(s);
+}
+
+// 樱花
+const petalEmojis = ['🌸','✿','❀','🌺'];
+for (let i = 0; i < 12; i++) {
+  const p = document.createElement('div');
+  p.className = 'petal';
+  p.textContent = petalEmojis[Math.floor(Math.random()*petalEmojis.length)];
+  p.style.cssText = `
+    left:${Math.random()*100}%;
+    font-size:${Math.random()*14+10}px;
+    animation-duration:${(Math.random()*8+6).toFixed(1)}s;
+    animation-delay:${(Math.random()*8).toFixed(1)}s;
+  `;
+  document.body.appendChild(p);
+}
+
+// ── 游戏逻辑 ──
+const LEVELS = {
+  easy:   { rows:9,  cols:9,  mines:10 },
+  medium: { rows:16, cols:16, mines:40 },
+  hard:   { rows:16, cols:30, mines:99 },
+};
+
+let level = 'easy';
+let rows, cols, totalMines;
+let board, revealed, flagged, mineSet;
+let gameState; // 'ready' | 'playing' | 'won' | 'lost'
+let timerInterval, elapsed;
+
+const boardEl   = document.getElementById('board');
+const mineCountEl = document.getElementById('mineCount');
+const timerEl   = document.getElementById('timer');
+const resetBtn  = document.getElementById('resetBtn');
+const overlay   = document.getElementById('overlay');
+const msgEmoji  = document.getElementById('msgEmoji');
+const msgTitle  = document.getElementById('msgTitle');
+const msgSub    = document.getElementById('msgSub');
+const msgBtn    = document.getElementById('msgBtn');
+
+// 难度按钮
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    level = btn.dataset.level;
+    initGame();
+  });
+});
+
+resetBtn.addEventListener('click', initGame);
+msgBtn.addEventListener('click', () => { overlay.classList.remove('show'); initGame(); });
+
+function initGame() {
+  clearInterval(timerInterval);
+  elapsed = 0;
+  gameState = 'ready';
+  const cfg = LEVELS[level];
+  rows = cfg.rows; cols = cfg.cols; totalMines = cfg.mines;
+
+  board   = Array.from({length:rows}, () => Array(cols).fill(0));
+  revealed= Array.from({length:rows}, () => Array(cols).fill(false));
+  flagged = Array.from({length:rows}, () => Array(cols).fill(false));
+  mineSet = new Set();
+
+  mineCountEl.textContent = String(totalMines).padStart(3,'0');
+  timerEl.textContent = '000';
+  resetBtn.textContent = '🌸';
+  overlay.classList.remove('show');
+  renderBoard();
+}
+
+function placeMines(safeR, safeC) {
+  const forbidden = new Set();
+  for (let dr=-1; dr<=1; dr++)
+    for (let dc=-1; dc<=1; dc++) {
+      const nr=safeR+dr, nc=safeC+dc;
+      if (nr>=0&&nr<rows&&nc>=0&&nc<cols)
+        forbidden.add(nr*cols+nc);
+    }
+  while (mineSet.size < totalMines) {
+    const idx = Math.floor(Math.random()*rows*cols);
+    if (!forbidden.has(idx)) mineSet.add(idx);
+  }
+  // 计算数字
+  for (let r=0; r<rows; r++)
+    for (let c=0; c<cols; c++) {
+      if (mineSet.has(r*cols+c)) { board[r][c]=-1; continue; }
+      let cnt=0;
+      for (let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
+        if(dr===0&&dc===0) continue;
+        const nr=r+dr,nc=c+dc;
+        if(nr>=0&&nr<rows&&nc>=0&&nc<cols&&mineSet.has(nr*cols+nc)) cnt++;
+      }
+      board[r][c]=cnt;
+    }
+}
+
+function renderBoard() {
+  boardEl.style.gridTemplateColumns = `repeat(${cols}, 32px)`;
+  boardEl.innerHTML = '';
+  for (let r=0; r<rows; r++)
+    for (let c=0; c<cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r; cell.dataset.c = c;
+      cell.addEventListener('click', onLeftClick);
+      cell.addEventListener('contextmenu', onRightClick);
+      boardEl.appendChild(cell);
+    }
+}
+
+function getCellEl(r,c){ return boardEl.children[r*cols+c]; }
+
+function updateCell(r,c) {
+  const el = getCellEl(r,c);
+  el.className = 'cell';
+  el.textContent = '';
+  if (flagged[r][c]) {
+    el.classList.add('flagged');
+    el.textContent = '🚩';
+  } else if (revealed[r][c]) {
+    el.classList.add('open');
+    const v = board[r][c];
+    if (v===-1) el.textContent = '💣';
+    else if (v>0) { el.textContent=v; el.classList.add('n'+v); }
+  }
+}
+
+function onLeftClick(e) {
+  const r=+this.dataset.r, c=+this.dataset.c;
+  if (gameState==='won'||gameState==='lost') return;
+  if (flagged[r][c]||revealed[r][c]) return;
+
+  if (gameState==='ready') {
+    gameState='playing';
+    placeMines(r,c);
+    startTimer();
+  }
+  reveal(r,c);
+  checkWin();
+}
+
+function onRightClick(e) {
+  e.preventDefault();
+  const r=+this.dataset.r, c=+this.dataset.c;
+  if (gameState==='won'||gameState==='lost') return;
+  if (revealed[r][c]) return;
+  flagged[r][c]=!flagged[r][c];
+  updateCell(r,c);
+  const flags = [...Array(rows*cols).keys()].filter(i=>flagged[Math.floor(i/cols)][i%cols]).length;
+  mineCountEl.textContent = String(totalMines-flags).padStart(3,'0');
+}
+
+function reveal(r,c) {
+  if (r<0||r>=rows||c<0||c>=cols) return;
+  if (revealed[r][c]||flagged[r][c]) return;
+  revealed[r][c]=true;
+  const el=getCellEl(r,c);
+
+  if (board[r][c]===-1) {
+    // 踩雷
+    gameState='lost';
+    el.className='cell mine-hit';
+    el.textContent='💥';
+    clearInterval(timerInterval);
+    resetBtn.textContent='😵';
+    // 展开所有雷
+    setTimeout(()=>{
+      for(let i=0;i<rows;i++) for(let j=0;j<cols;j++){
+        if(mineSet.has(i*cols+j)&&!(i===r&&j===c)&&!flagged[i][j]){
+          const me=getCellEl(i,j);
+          me.className='cell mine-reveal';
+          me.textContent='💣';
+        }
+      }
+      showOverlay(false, elapsed);
+    }, 600);
+    return;
+  }
+
+  updateCell(r,c);
+  el.classList.add('open-anim');
+
+  if (board[r][c]===0) {
+    for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++)
+      if(!(dr===0&&dc===0)) reveal(r+dr,c+dc);
+  }
+}
+
+function checkWin(){
+  const openCount=[...Array(rows*cols).keys()]
+    .filter(i=>revealed[Math.floor(i/cols)][i%cols]).length;
+  if(openCount===rows*cols-totalMines){
+    gameState='won';
+    clearInterval(timerInterval);
+    resetBtn.textContent='🏆';
+    launchFireworks();
+    setTimeout(()=>showOverlay(true,elapsed),600);
+  }
+}
+
+function startTimer(){
+  timerInterval=setInterval(()=>{
+    elapsed++;
+    timerEl.textContent=String(Math.min(elapsed,999)).padStart(3,'0');
+  },1000);
+}
+
+function showOverlay(win, time){
+  if(win){
+    msgEmoji.textContent='🎉';
+    msgTitle.textContent='恭喜胜利！';
+    msgSub.textContent=`用时 ${time} 秒，优雅地扫除了所有地雷～`;
+  } else {
+    msgEmoji.textContent='💥';
+    msgTitle.textContent='踩到地雷了！';
+    msgSub.textContent='没关系，再试一次！你可以的 ✨';
+  }
+  overlay.classList.add('show');
+}
+
+// 烟花
+function launchFireworks(){
+  const colors=['#FF6B9D','#B39DDB','#7FFFD4','#FFD700','#87CEEB'];
+  for(let b=0;b<6;b++){
+    setTimeout(()=>{
+      const x=Math.random()*window.innerWidth;
+      const y=Math.random()*window.innerHeight*0.6+50;
+      for(let i=0;i<20;i++){
+        const fw=document.createElement('div');
+        fw.className='firework';
+        const angle=Math.random()*Math.PI*2;
+        const dist=Math.random()*120+40;
+        fw.style.cssText=`
+          left:${x}px;top:${y}px;
+          background:${colors[Math.floor(Math.random()*colors.length)]};
+          box-shadow:0 0 6px 2px ${colors[Math.floor(Math.random()*colors.length)]};
+          --dx:${Math.cos(angle)*dist}px;
+          --dy:${Math.sin(angle)*dist}px;
+          animation-duration:${(Math.random()*0.4+0.6).toFixed(2)}s;
+          animation-delay:${(Math.random()*0.2).toFixed(2)}s;
+        `;
+        document.body.appendChild(fw);
+        setTimeout(()=>fw.remove(),1200);
+      }
+    }, b*180);
+  }
+}
+
+initGame();
+</script>
+</body>
+</html>
